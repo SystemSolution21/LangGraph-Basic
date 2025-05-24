@@ -26,7 +26,7 @@ load_dotenv()
 llm: BaseChatModel = init_chat_model(model="gemma3:4b", model_provider="ollama")
 
 
-# State schema with messages
+# State messages schema
 class State(TypedDict):
     """
     Represents the state of the conversation graph.
@@ -66,6 +66,20 @@ state_graph.add_edge(start_key="chatbot", end_key=END)
 graph: CompiledStateGraph = state_graph.compile()
 
 
+def stream_graph_updates(user_input: str) -> None:
+    """
+    Streams updates from the graph as they are generated.
+
+    Args:
+        user_input: The user's input to send to the chatbot.
+    """
+    for event in graph.stream(
+        input={"messages": [{"role": "user", "content": user_input}]}
+    ):
+        for value in event.values():
+            print(f'\nChatbot: {value["messages"][-1].content}')
+
+
 # Main entrypoint
 def main() -> None:
     """
@@ -79,14 +93,7 @@ def main() -> None:
         user_input: str = input("Ask any question to the chatbot (type 'x' to exit): ")
         if user_input != "x":
             # Run graph
-            state: dict[str, Any] | Any = graph.invoke(
-                input={"messages": [{"role": "user", "content": user_input}]}
-            )
-            # Print response
-            # print(state["messages"], "\n\n")  # debug
-            response = state["messages"][-1].content
-            print(f"\nChatbot: {response}")
-
+            stream_graph_updates(user_input=user_input)
         else:
             print("Exiting...")
             break
