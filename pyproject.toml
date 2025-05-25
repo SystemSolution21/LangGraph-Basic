@@ -28,7 +28,7 @@ dependencies = [
     "jsonpointer==3.0.0",
     "jupyter-client==8.6.3",
     "jupyter-core==5.7.2",
-    "langchain==0.3.25",
+    "langchain[openai]==0.3.25",
     "langchain-core==0.3.61",
     "langchain-ollama==0.3.3",
     "langchain-tavily>=0.1.6",
