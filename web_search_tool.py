@@ -21,6 +21,11 @@ receive its output, and then generate a final response to the user.
 
 from typing import Annotated, Any
 from typing_extensions import TypedDict
+from langgraph.graph.state import CompiledStateGraph
+from langchain_core.messages.base import BaseMessage
+from langchain_core.runnables.base import Runnable
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models.base import LanguageModelInput
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -37,39 +42,39 @@ load_dotenv()
 
 # Set Tavily API key
 if not os.getenv(key="TAVILY_API_KEY"):
-    os.environ["TAVILY_API_KEY"] = getpass("Enter your Tavily API Key:\n")
+    os.environ["TAVILY_API_KEY"] = getpass(prompt="Enter your Tavily API Key:\n")
 
 # Initialize Tavily Search
-tool = TavilySearch(max_results=2)
-tools = [tool]
+tool = TavilySearch(max_results=1)
+tools: list[TavilySearch] = [tool]
 
 # Set OpenAI API key
-if not os.getenv("OPENAI_API_KEY"):
-    os.environ["OPENAI_API_KEY"] = input("Enter your OpenAI API Key:\n")
+if not os.getenv(key="OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = getpass(prompt="Enter your OpenAI API Key:\n")
 
 # Initialize chat model
-llm = init_chat_model("openai:gpt-4.1")
+llm: BaseChatModel = init_chat_model(model="gpt-4.1", model_provider="openai")
 
 
-# State schema with messages
+# State schema
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 
 # Initialize state graph
-graph_builder = StateGraph(State)
+graph_builder = StateGraph(state_schema=State)
 
 # Bind tools with llm
-llm_with_tools = llm.bind_tools(tools)
+llm_with_tools: Runnable[LanguageModelInput, BaseMessage] = llm.bind_tools(tools=tools)
 
 
 # Define chatbot
-def chatbot(state: State):
-    return {"messages": [llm_with_tools.invoke(state["messages"])]}
+def chatbot(state: State) -> dict[str, list[BaseMessage]]:
+    return {"messages": [llm_with_tools.invoke(input=state["messages"])]}
 
 
 # Add chatbot to state graph
-graph_builder.add_node("chatbot", chatbot)
+graph_builder.add_node(node="chatbot", action=chatbot)
 
 
 # Define tool node
@@ -77,17 +82,21 @@ class BasicToolNode:
     """A node that runs the tools requested in the last AIMessage."""
 
     def __init__(self, tools: list) -> None:
-        self.tools_by_name = {tool.name: tool for tool in tools}
+        self.tools_by_name: dict[str, TavilySearch] = {
+            tool.name: tool for tool in tools
+        }
 
     def __call__(self, inputs: dict) -> dict[str, list[Any]]:
         if messages := inputs.get("messages", []):
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
-        outputs = []
+
+        outputs: list[ToolMessage] = []
+
         for tool_call in message.tool_calls:
-            tool_result = self.tools_by_name[tool_call["name"]].invoke(
-                tool_call["args"]
+            tool_result: dict[str, Any] = self.tools_by_name[tool_call["name"]].invoke(
+                input=tool_call["args"]
             )
             outputs.append(
                 ToolMessage(
@@ -112,11 +121,13 @@ def route_tools(
     Conditional_edge to route to the ToolNode if the last message
     has tool calls. Otherwise, route to the end.
     """
-    messages = state.get("messages", [])
+    messages: list[BaseMessage] = state.get("messages", [])
     if not messages:
         return END
-    ai_message = messages[-1]
-    tool_calls = getattr(ai_message, "tool_calls", None)
+
+    ai_message: BaseMessage = messages[-1]
+    tool_calls: Any | None = getattr(ai_message, "tool_calls", None)
+
     if tool_calls and len(tool_calls) > 0:
         return "tools"
     return END
@@ -132,7 +143,7 @@ graph_builder.add_conditional_edges(
 # Add edges
 graph_builder.add_edge(start_key="tools", end_key="chatbot")
 graph_builder.add_edge(start_key=START, end_key="chatbot")
-graph = graph_builder.compile()
+graph: CompiledStateGraph = graph_builder.compile()
 
 
 # Stream graph updates
