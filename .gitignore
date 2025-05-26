@@ -13,5 +13,5 @@ wheels/
 .env
 .env/
 
-# VSCode
-.vscode/
+# Ruff cache
+.ruff_cache/
