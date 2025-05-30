@@ -28,9 +28,6 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages.base import BaseMessage
 from langchain_core.runnables.base import Runnable
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.language_models.base import (
-    LanguageModelInput,
-)
 
 from langgraph.graph import StateGraph, START
 from langgraph.graph.message import add_messages
@@ -57,21 +54,24 @@ tavily_api_key: str | None = os.getenv(key=TAVILY_API_KEY)
 if not tavily_api_key:
     tavily_api_key = getpass(prompt=f"Enter your {TAVILY_API_KEY}:\n")
     if not tavily_api_key:
-        print(f"Error: {TAVILY_API_KEY} was not provided. Exiting...")
+        print(f"Please set your {TAVILY_API_KEY}. Exiting...")
         exit(code=1)
     os.environ[TAVILY_API_KEY] = tavily_api_key
 
+
 # Initialize Tavily Search
 tools: List[TavilySearch] = [TavilySearch(max_results=TAVILY_MAX_RESULTS)]
+
 
 # Set OpenAI API key
 openai_api_key: str | None = os.getenv(key=OPENAI_API_KEY)
 if not openai_api_key:
     openai_api_key = getpass(prompt=f"Enter your {OPENAI_API_KEY}:\n")
     if not openai_api_key:
-        print(f"Error: {OPENAI_API_KEY} was not provided. Exiting.")
+        print(f"Please set your {OPENAI_API_KEY}. Exiting...")
         exit(code=1)
     os.environ[OPENAI_API_KEY] = openai_api_key
+
 
 # Initialize chat model
 llm: BaseChatModel = init_chat_model(model=MODEL_NAME, model_provider=PROVIDER_NAME)
@@ -91,6 +91,7 @@ class State(TypedDict):
 
 # Initialize state graph
 graph_builder = StateGraph(state_schema=State)
+
 
 # Bind tools with llm
 llm_with_tools: Runnable = llm.bind_tools(tools=tools)
@@ -114,15 +115,18 @@ def chatbot(state: State) -> dict[str, list[BaseMessage]]:
 # Add chatbot to state graph
 graph_builder.add_node(node="chatbot", action=chatbot)
 
+
 # Add tool node to state graph
 tool_node = ToolNode(tools=tools)
 graph_builder.add_node(node="tools", action=tool_node)
+
 
 # Add conditional edges
 graph_builder.add_conditional_edges(
     source="chatbot",
     path=tools_condition,
 )
+
 
 # Add edges
 graph_builder.add_edge(start_key="tools", end_key="chatbot")
